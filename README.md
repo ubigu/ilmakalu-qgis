@@ -6,8 +6,6 @@ Climate Tool is a QGIS plugin for assessing climate impacts in cities. The plugi
 
 **Developed by the joint cooperation of [City of Tampere](https://www.tampere.fi/), [Ubigu Ltd](https://www.ubigu.fi/en/), [Tietotakomo](https://www.tietotakomo.fi/) & [Gispo Ltd](https://www.gispo.fi/en/home/).**
 
-The plugin is still in beta-development. Please report issues to mikael@gispo.fi.
-
 Many thanks to the project team!
 
 ## Licences
