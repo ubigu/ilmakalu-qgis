@@ -627,24 +627,25 @@ class YKRTool:
 
     def addResultAsLayers(self, results):
         try:
-            uid = self.sessionParams["uuid"]
             layers = []
+            layerNames = [
+                ("CO2 sources", "docs/CO2_sources.qml"),
+                ("CO2 grid", "docs/CO2_t_grid.qml"),
+            ]
             for result in results:
-                layer = QgsVectorLayer(
-                    json.dumps(result),
-                    "CO2 grid {}".format(uid),
-                    "ogr",
-                )
-                layer.loadNamedStyle(
-                    os.path.join(self.plugin_dir, "docs/CO2_t_grid.qml")
-                )
-                renderer = layer.renderer()
-                if renderer.type() == "graduatedSymbol":
-                    renderer.updateClasses(
-                        layer, renderer.mode(), len(renderer.ranges())
+                for name in layerNames:
+                    layer = QgsVectorLayer(
+                        json.dumps(result),
+                        name[0] + " " + self.sessionParams["uuid"],
+                        "ogr",
                     )
-                layers.append(layer)
-
+                    layer.loadNamedStyle(os.path.join(self.plugin_dir, name[1]))
+                    renderer = layer.renderer()
+                    if renderer.type() == "graduatedSymbol":
+                        renderer.updateClasses(
+                            layer, renderer.mode(), len(renderer.ranges())
+                        )
+                    layers.append(layer)
             QgsProject.instance().addMapLayers(layers)
         except Exception as e:
             self.iface.messageBar().pushMessage(
