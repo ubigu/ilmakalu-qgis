@@ -32,7 +32,6 @@ import uuid
 from configparser import ConfigParser
 from functools import partial
 
-import requests
 from PyQt5 import uic
 from PyQt5.QtCore import QCoreApplication, QSettings, QTranslator, qVersion
 from PyQt5.QtGui import QIcon
@@ -41,7 +40,6 @@ from qgis.core import (
     Qgis,
     QgsApplication,
     QgsCoordinateReferenceSystem,
-    QgsDataSourceUri,
     QgsProcessingAlgRunnerTask,
     QgsProcessingContext,
     QgsProcessingFeedback,
@@ -54,6 +52,7 @@ from .areas import municipalities, regions
 
 # Initialize Qt resources from file resources.py
 from .resources import *
+from .ykr_tool_tasks import QueryTask
 
 
 class YKRTool:
@@ -102,6 +101,7 @@ class YKRTool:
         self.futureAreasLayer = None
         self.futureNetworkLayer = None
         self.futureStopsLayer = None
+        self.urlBase = "http://localhost:4000/"
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -484,29 +484,27 @@ class YKRTool:
     def runCalculation(self):
         """Runs the main calculation"""
         try:
+            queries = self.getCalculationQueries()
+            queryTask = QueryTask(queries)
+
+            queryTask.calcResult.connect(self.addResultAsLayers)
+            queryTask.taskCompleted.connect(self.postCalculation)
+            queryTask.taskTerminated.connect(self.postError)
+            QgsApplication.taskManager().addTask(queryTask)
             self.iface.messageBar().pushMessage(
                 "Lasketaan", "Laskenta käynnissä", Qgis.Info, duration=15
             )
-            url = "http://localhost:4000/"
+        except Exception as e:
+            self.iface.messageBar().pushMessage(
+                "Virhe laskennassa", str(e), Qgis.Critical, duration=0
+            )
+            self.cleanUpSession()
+            return False
+
+        """try:
+            
             uid = str(self.sessionParams["uuid"])
-            params = {
-                "mun": self.geomArea,
-                "calculationScenario": self.pitkoScenario,
-                "method": self.emissionsAllocation,
-                "electricityType": self.elecEmissionType,
-                "includeLongDistance": self.includeLongDistance,
-                "includeBusinessTravel": self.includeBusinessTravel,
-                "outputFormat": "geojson",
-            }
-            if not self.mainDialog.calculateFuture.isChecked():
-                url += "co2-calculate-emissions/"
-                params |= {"calculationYear": self.sessionParams["baseYear"]}
-            else:
-                url += "co2-calculate-emissions-loop/"
-                params |= {
-                    "baseYear": self.sessionParams["baseYear"],
-                    "targetYear": self.targetYear,
-                }
+            
             output = requests.get(url, params=params).json()
             layer = QgsVectorLayer(
                 json.dumps(output),
@@ -527,48 +525,45 @@ class YKRTool:
                 "Virhe laskennassa", str(e), Qgis.Critical, duration=0
             )
             self.cleanUpSession()
-            return False
+            return False"""
 
     def getCalculationQueries(self):
         """Generate queries to call processing functions in database"""
-        vals = {
-            "uuid": self.sessionParams["uuid"],
-            "aoi": "tutkimusalue_uuid",
-            "geomArea": self.geomArea,
-            "calcYear": self.sessionParams["baseYear"],
-            "baseYear": self.sessionParams["baseYear"],
-            "pitkoScenario": self.pitkoScenario,
-            "emissionsAllocation": self.emissionsAllocation,
-            "elecEmissionType": self.elecEmissionType,
-        }
         queries = []
+
+        params = {
+            "mun": self.geomArea,
+            "calculationScenario": self.pitkoScenario,
+            "method": self.emissionsAllocation,
+            "electricityType": self.elecEmissionType,
+            "includeLongDistance": self.includeLongDistance,
+            "includeBusinessTravel": self.includeBusinessTravel,
+            "outputFormat": "geojson",
+        }
         if not self.calculateFuture:
             queries.append(
-                """CREATE TABLE user_output."output_{uuid}" AS
-            SELECT * FROM il_calculate_emissions('{popTable}', '{jobTable}',
-            '{buildingTable}', '{aoi}', '{calcYear}', '{pitkoScenario}',
-            '{emissionsAllocation}', '{elecEmissionType}', '{geomArea}',
-            '{baseYear}')""".format(**vals)
+                {
+                    "url": self.urlBase + "co2-calculate-emissions/",
+                    "params": params
+                    | {"calculationYear": self.sessionParams["baseYear"]},
+                }
             )
         else:
-            futureQuery = self.generateFutureQuery(vals)
+            futureQuery = self.generateFutureQuery(params)
             queries.append(futureQuery)
         return queries
 
-    def generateFutureQuery(self, vals):
+    def generateFutureQuery(self, params):
         """Constructs a query for future calculation"""
-        futureVals = {
-            "fAreas": (self.tableNames[self.futureAreasLayer]).lower(),
-            "targetYear": self.targetYear,
+        query = {
+            "url": self.urlBase + "co2-calculate-emissions-loop/",
+            "params": params
+            | {
+                "baseYear": self.sessionParams["baseYear"],
+                "targetYear": self.targetYear,
+            },
         }
-        vals.update(futureVals)
-        query = """CREATE TABLE user_output."output_{uuid}" AS
-        SELECT * FROM il_calculate_emissions_loop('{popTable}', '{jobTable}',
-        '{buildingTable}', '{aoi}', '{pitkoScenario}',
-        '{emissionsAllocation}', '{elecEmissionType}', '{geomArea}',
-        '{baseYear}', '{targetYear}', '{fAreas}'""".format(**vals)
-
-        futureNetworkTableName = (self.tableNames[self.futureNetworkLayer]).lower()
+        """futureNetworkTableName = (self.tableNames[self.futureNetworkLayer]).lower()
         if futureNetworkTableName:
             query += ", '{}'".format(futureNetworkTableName)
         else:
@@ -576,7 +571,7 @@ class YKRTool:
         futureStopsTableName = (self.tableNames[self.futureStopsLayer]).lower()
         if futureStopsTableName:
             query += ", '{}'".format(futureStopsTableName)
-        query += ")"
+        query += ")"""
         return query
 
     def postCalculation(self):
@@ -593,13 +588,6 @@ class YKRTool:
             self.iface.messageBar().pushMessage(
                 "Virhe kirjoittaessa session tietoja:", str(e), Qgis.Warning, duration=0
             )
-            self.conn.rollback()
-        try:
-            self.addResultAsLayers()
-        except Exception as e:
-            self.iface.messageBar().pushMessage(
-                "Virhe lisättäessä tulostasoa:", str(e), Qgis.Warning, duration=0
-            )
         try:
             self.cleanUpSession()
         except Exception as e:
@@ -608,6 +596,7 @@ class YKRTool:
             )
 
     def writeSessionInfo(self):
+        return
         """Writes session info to user_output.sessions table"""
         uuid = self.sessionParams["uuid"]
         user = self.sessionParams["user"]
@@ -636,42 +625,34 @@ class YKRTool:
         )
         self.conn.commit()
 
-    def addResultAsLayers(self):
-        layers, layerNames = [], []
-        uid = self.sessionParams["uuid"]
-        layerNames.append(
-            (
-                "CO2 sources {}".format(uid),
-                os.path.join(self.plugin_dir, "docs/CO2_sources.qml"),
-            )
-        )
-        layerNames.append(
-            (
-                "CO2 grid {}".format(uid),
-                os.path.join(self.plugin_dir, "docs/CO2_t_grid.qml"),
-            )
-        )
+    def addResultAsLayers(self, results):
+        try:
+            uid = self.sessionParams["uuid"]
+            layers = []
+            for result in results:
+                layer = QgsVectorLayer(
+                    json.dumps(result),
+                    "CO2 grid {}".format(uid),
+                    "ogr",
+                )
+                layer.loadNamedStyle(
+                    os.path.join(self.plugin_dir, "docs/CO2_t_grid.qml")
+                )
+                renderer = layer.renderer()
+                if renderer.type() == "graduatedSymbol":
+                    renderer.updateClasses(
+                        layer, renderer.mode(), len(renderer.ranges())
+                    )
+                layers.append(layer)
 
-        uri = QgsDataSourceUri()
-        uri.setConnection(
-            self.connParams["host"],
-            self.connParams["port"],
-            self.connParams["database"],
-            self.connParams["user"],
-            self.connParams["password"],
-        )
-        uri.setDataSource("user_output", "output_" + self.sessionParams["uuid"], "geom")
-
-        for name in layerNames:
-            layer = QgsVectorLayer(uri.uri(False), name[0], "postgres")
-            layer.loadNamedStyle(name[1])
-            renderer = layer.renderer()
-            if renderer.type() == "graduatedSymbol":
-                renderer.updateClasses(layer, renderer.mode(), len(renderer.ranges()))
-            layers.append(layer)
-        QgsProject.instance().addMapLayers(layers)
+            QgsProject.instance().addMapLayers(layers)
+        except Exception as e:
+            self.iface.messageBar().pushMessage(
+                "Virhe lisättäessä tulostasoa:", str(e), Qgis.Warning, duration=0
+            )
 
     def cleanUpSession(self):
+        return
         """Delete temporary data and close db connection"""
         for table in list(self.tableNames.values()):
             if not table:
@@ -691,11 +672,6 @@ class YKRTool:
 
     def postError(self):
         """Called after querytask is terminated. Closes session"""
-        self.cur.execute(
-            'DROP TABLE IF EXISTS user_input."ykr_{}"'.format(
-                self.sessionParams["uuid"]
-            )
-        )
         self.cleanUpSession()
         self.iface.messageBar().pushMessage(
             "Virhe laskentafunktiota suorittaessa",

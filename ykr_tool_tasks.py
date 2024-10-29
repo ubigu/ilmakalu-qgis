@@ -1,42 +1,39 @@
-from qgis.core import (QgsTask, QgsMessageLog, Qgis)
-from .createdbconnection import createDbConnection
+import requests
+from PyQt5.QtCore import pyqtSignal
+from qgis.core import Qgis, QgsMessageLog, QgsTask
+
 
 class QueryTask(QgsTask):
-    def __init__(self, connParams, queries):
-        super().__init__('Suoritetaan laskentaa', QgsTask.CanCancel)
+    calcResult = pyqtSignal(list)
+
+    def __init__(self, queries):
+        super().__init__("Suoritetaan laskentaa", QgsTask.CanCancel)
         self.exception = None
-        self.conn = None
         self.queries = queries
-        try:
-            self.conn = createDbConnection(connParams)
-            self.cur = self.conn.cursor()
-        except Exception as e:
-            self.exception = e
+        self.results = []
 
     def run(self):
         if self.exception:
             return False
 
-        i = 0
-        for query in self.queries:
+        for i, query in enumerate(self.queries):
             self.setProgress(i / len(self.queries) * 100)
-            i += 1
             if self.isCanceled():
-                self.exception = 'Laskenta keskeytetty'
+                self.exception = "Laskenta keskeytetty"
                 return False
             try:
-                self.cur.execute(query)
+                self.results.append(requests.get(**query).json())
             except Exception as e:
                 self.exception = e
-                self.conn.rollback()
-                self.conn.close()
                 return False
-        self.conn.commit()
-        self.conn.close()
+
+        self.calcResult.emit(self.results)
         return True
 
     def finished(self, result):
         if not result:
-            QgsMessageLog.logMessage('Laskentavirhe: ' + str(self.exception), 'YKRTool', Qgis.Critical)
+            QgsMessageLog.logMessage(
+                "Laskentavirhe: " + str(self.exception), "YKRTool", Qgis.Critical
+            )
             # raise self.exception
             self.cancel()
