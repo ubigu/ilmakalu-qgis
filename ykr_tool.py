@@ -40,6 +40,7 @@ from qgis.core import (
     Qgis,
     QgsApplication,
     QgsCoordinateReferenceSystem,
+    QgsJsonExporter,
     QgsProcessingAlgRunnerTask,
     QgsProcessingContext,
     QgsProcessingFeedback,
@@ -243,7 +244,8 @@ class YKRTool:
         self.sessionParams = self.generateSessionParameters()
         self.readProcessingInput()
         self.checkLayerValidity()
-        # self.uploadInputLayers()
+        if self.calculateFuture:
+            self.futureLayersToGeoJSON()
         self.runCalculation()
 
     def setupMainDialog(self):
@@ -383,22 +385,21 @@ class YKRTool:
             )
         if md.futureNetworkLoadLayer.isChecked():
             self.futureNetworkLayer = md.futureNetworkLayerList.currentLayer()
+        elif md.futureNetworkFile.filePath():
+            self.futureNetworkLayer = QgsVectorLayer(
+                md.futureNetworkFile.filePath(), "keskusverkko_tulevaisuus", "ogr"
+            )
         else:
-            if md.futureNetworkFile.filePath():
-                self.futureNetworkLayer = QgsVectorLayer(
-                    md.futureNetworkFile.filePath(), "keskusverkko_tulevaisuus", "ogr"
-                )
+            self.futureNetworkLayer = None
         if md.futureStopsLoadLayer.isChecked():
             self.futureStopsLayer = md.futureStopsLayerList.currentLayer()
+        elif md.futureStopsFile.filePath():
+            self.futureStopsLayer = QgsVectorLayer(
+                md.futureStopsFile.filePath(), "joukkoliikenne_tulevaisuus", "ogr"
+            )
         else:
-            if md.futureStopsFile.filePath():
-                self.futureStopsLayer = QgsVectorLayer(
-                    md.futureStopsFile.filePath(), "joukkoliikenne_tulevaisuus", "ogr"
-                )
+            self.futureStopsLayer = None
         self.targetYear = md.targetYear.value()
-        self.inputLayers.extend(
-            [self.futureAreasLayer, self.futureNetworkLayer, self.futureStopsLayer]
-        )
 
     def checkLayerValidity(self):
         """Checks that necessary layers are valid and raise an exception if needed"""
@@ -416,7 +417,34 @@ class YKRTool:
             if not self.futureStopsLayer.isValid():
                 raise Exception("Virhe ladattaessa joukkoliikennepysäkkitietoja")
 
+    def __layerToGeoJSON(self, base, layer):
+        return {
+            "name": (self.sessionParams["uuid"] + "_" + base)[
+                :49
+            ],  # truncate tablename to under 63c
+            "base": base,
+            "features": json.loads(
+                QgsJsonExporter().exportFeatures(list(layer.getFeatures()))
+            ),
+        }
+
+    def futureLayersToGeoJSON(self):
+        """Convert the input layers to GeoJSON"""
+        if self.futureAreasLayer is not None:
+            self.inputLayers.append(
+                self.__layerToGeoJSON("plan_areas", self.futureAreasLayer)
+            )
+        if self.futureNetworkLayer is not None:
+            self.inputLayers.append(
+                self.__layerToGeoJSON("plan_centers", self.futureNetworkLayer)
+            )
+        if self.futureStopsLayer is not None:
+            self.inputLayers.append(
+                self.__layerToGeoJSON("plan_transit", self.futureStopsLayer)
+            )
+
     def uploadInputLayers(self):
+        return
         """Write layers to database"""
         self.layerUploadIndex = 0
         self.uploadSingleLayer()
@@ -464,6 +492,7 @@ class YKRTool:
         )
 
     def uploadFinished(self, context, successful, results):
+        return
         if not successful:
             self.iface.messageBar().pushMessage(
                 "Virhe",
@@ -474,6 +503,7 @@ class YKRTool:
         self.uploadNextLayer()
 
     def uploadNextLayer(self):
+        return
         """Uploads the next layer in the input layer list"""
         self.layerUploadIndex += 1
         if self.layerUploadIndex < len(self.inputLayers):
@@ -485,7 +515,7 @@ class YKRTool:
         """Runs the main calculation"""
         try:
             queries = self.getCalculationQueries()
-            queryTask = QueryTask(queries)
+            queryTask = QueryTask(queries, self.inputLayers)
 
             queryTask.calcResult.connect(self.addResultAsLayers)
             queryTask.taskCompleted.connect(self.postCalculation)
@@ -500,32 +530,6 @@ class YKRTool:
             )
             self.cleanUpSession()
             return False
-
-        """try:
-            
-            uid = str(self.sessionParams["uuid"])
-            
-            output = requests.get(url, params=params).json()
-            layer = QgsVectorLayer(
-                json.dumps(output),
-                "CO2 grid {}".format(uid),
-                "ogr",
-            )
-            layer.loadNamedStyle(os.path.join(self.plugin_dir, "docs/CO2_t_grid.qml"))
-            QgsProject.instance().addMapLayer(layer)
-
-            self.iface.messageBar().pushMessage(
-                "Valmis",
-                "Laskentasessio " + uid + " on valmis",
-                Qgis.Success,
-                duration=0,
-            )
-        except Exception as e:
-            self.iface.messageBar().pushMessage(
-                "Virhe laskennassa", str(e), Qgis.Critical, duration=0
-            )
-            self.cleanUpSession()
-            return False"""
 
     def getCalculationQueries(self):
         """Generate queries to call processing functions in database"""
