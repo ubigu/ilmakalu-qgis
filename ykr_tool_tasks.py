@@ -34,7 +34,6 @@ class QueryTask(QgsTask):
             except Exception as e:
                 self.exception = e
                 return False
-
         self.calcResult.emit(self.results)
         return True
 

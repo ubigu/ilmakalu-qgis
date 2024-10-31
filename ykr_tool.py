@@ -216,17 +216,24 @@ class YKRTool:
 
     def run(self):
         """Run method that performs all the real work"""
-
+        md = self.mainDialog
         # Create the dialog with elements (after translation) and keep reference
         # Only create GUI ONCE in callback, so that it will only load when the plugin is started
         if self.first_start:
             self.first_start = False
             self.setupMainDialog()
 
-        self.mainDialog.show()
+        # Check if features are selected
+        if self.iface.activeLayer().selectedFeatures():
+            md.onlySelectedFeats.setEnabled(True)
+        else:
+            md.onlySelectedFeats.setEnabled(False)
+            md.onlySelectedFeats.setChecked(False)
+
+        md.show()
 
         # Run the dialog event loop
-        result = self.mainDialog.exec_()
+        result = md.exec_()
 
         # See if OK was pressed
         if result:
@@ -244,8 +251,7 @@ class YKRTool:
         self.sessionParams = self.generateSessionParameters()
         self.readProcessingInput()
         self.checkLayerValidity()
-        if self.calculateFuture:
-            self.futureLayersToGeoJSON()
+        self.layersToGeoJSON()
         self.runCalculation()
 
     def setupMainDialog(self):
@@ -417,30 +423,45 @@ class YKRTool:
             if not self.futureStopsLayer.isValid():
                 raise Exception("Virhe ladattaessa joukkoliikennepysäkkitietoja")
 
-    def __layerToGeoJSON(self, base, layer):
+    def __featuresToGeoJSON(self, base, features):
         return {
             "name": (self.sessionParams["uuid"] + "_" + base)[
                 :49
             ],  # truncate tablename to under 63c
             "base": base,
-            "features": json.loads(
-                QgsJsonExporter().exportFeatures(list(layer.getFeatures()))
-            ),
+            "features": json.loads(QgsJsonExporter().exportFeatures(features)),
         }
 
-    def futureLayersToGeoJSON(self):
+    def layersToGeoJSON(self):
         """Convert the input layers to GeoJSON"""
+        if self.onlySelectedFeats:
+            self.inputLayers.append(
+                self.__featuresToGeoJSON(
+                    "aoi", self.iface.activeLayer().selectedFeatures()
+                )
+            )
+        if self.calculateFuture:
+            self.futureLayersToGeoJSON()
+
+    def futureLayersToGeoJSON(self):
+        """Convert the future layers to GeoJSON"""
         if self.futureAreasLayer is not None:
             self.inputLayers.append(
-                self.__layerToGeoJSON("plan_areas", self.futureAreasLayer)
+                self.__featuresToGeoJSON(
+                    "plan_areas", list(self.futureAreasLayer.getFeatures())
+                )
             )
         if self.futureNetworkLayer is not None:
             self.inputLayers.append(
-                self.__layerToGeoJSON("plan_centers", self.futureNetworkLayer)
+                self.__featuresToGeoJSON(
+                    "plan_centers", list(self.futureNetworkLayer.getFeatures())
+                )
             )
         if self.futureStopsLayer is not None:
             self.inputLayers.append(
-                self.__layerToGeoJSON("plan_transit", self.futureStopsLayer)
+                self.__featuresToGeoJSON(
+                    "plan_transit", list(self.futureStopsLayer.getFeatures())
+                )
             )
 
     def uploadInputLayers(self):
@@ -638,6 +659,9 @@ class YKRTool:
             ]
             for result in results:
                 for name in layerNames:
+                    # Do not add a layer if there are no features
+                    if not result["features"]:
+                        continue
                     layer = QgsVectorLayer(
                         json.dumps(result),
                         name[0] + " " + self.sessionParams["uuid"],
