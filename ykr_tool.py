@@ -22,15 +22,13 @@
  ***************************************************************************/
 """
 
-import datetime
 import getpass
 import json
 import os
 
 # Import the code for the dialog
 import uuid
-from configparser import ConfigParser
-from functools import partial
+from datetime import datetime
 
 from PyQt5 import uic
 from PyQt5.QtCore import QCoreApplication, QSettings, QTranslator, qVersion
@@ -39,15 +37,10 @@ from PyQt5.QtWidgets import QAction
 from qgis.core import (
     Qgis,
     QgsApplication,
-    QgsCoordinateReferenceSystem,
     QgsJsonExporter,
-    QgsProcessingAlgRunnerTask,
-    QgsProcessingContext,
-    QgsProcessingFeedback,
     QgsProject,
     QgsVectorLayer,
 )
-from qgis.gui import QgsFileWidget
 
 from .areas import municipalities, regions
 
@@ -93,9 +86,6 @@ class YKRTool:
         self.first_start = None
 
         self.mainDialog = uic.loadUi(os.path.join(self.plugin_dir, "ykr_tool_main.ui"))
-        self.settingsDialog = uic.loadUi(
-            os.path.join(self.plugin_dir, "ykr_tool_db_settings.ui")
-        )
         self.infoDialog = uic.loadUi(os.path.join(self.plugin_dir, "ykr_tool_info.ui"))
 
         self.targetYear = None
@@ -243,7 +233,6 @@ class YKRTool:
                 self.iface.messageBar().pushMessage(
                     "Virhe esikäsittelyssä", str(e), Qgis.Critical, duration=0
                 )
-                self.cleanUpSession()
                 return False
 
     def preProcess(self):
@@ -280,47 +269,6 @@ class YKRTool:
 
         md.calculateFuture.clicked.connect(self.handleLayerToggle)
 
-    def displaySettingsDialog(self):
-        """Sets up and displays the settings dialog"""
-        self.settingsDialog.show()
-        self.settingsDialog.configFileInput.setStorageMode(QgsFileWidget.GetFile)
-        self.settingsDialog.configFileInput.setFilePath(
-            QSettings().value("/YKRTool/configFilePath", "", type=str)
-        )
-        self.settingsDialog.loadFileButton.clicked.connect(
-            self.setConnectionParamsFromFile
-        )
-
-        result = self.settingsDialog.exec_()
-        if result:
-            self.connParams = self.readConnectionParamsFromInput()
-
-    def parseConfigFile(self, filePath):
-        """Reads configuration file and returns parameters as a dict"""
-        # Setup an empty dict with correct keys to avoid keyerrors
-        dbParams = {"host": "", "port": "", "database": "", "user": "", "password": ""}
-        if not os.path.exists(filePath):
-            self.iface.messageBar().pushMessage(
-                "Virhe", "Tiedostoa ei voitu lukea", Qgis.Warning
-            )
-            return dbParams
-
-        parser = ConfigParser()
-        parser.read(filePath)
-        if parser.has_section("postgresql"):
-            params = parser.items("postgresql")
-            for param in params:
-                dbParams[param[0]] = param[1]
-        else:
-            self.iface.messageBar().pushMessage(
-                "Virhe",
-                "Tiedosto ei sisällä\
-                tietokannan yhteystietoja",
-                Qgis.Warning,
-            )
-
-        return dbParams
-
     def handleLayerToggle(self):
         """Toggle UI components visibility based on selection"""
         if self.mainDialog.futureAreasLoadLayer.isChecked():
@@ -349,16 +297,11 @@ class YKRTool:
 
     def generateSessionParameters(self):
         """Get necessary values for processing session"""
-        sessionParams = {}
-
-        usr = getpass.getuser()
-        sessionParams["user"] = usr.replace(" ", "_")
-        now = datetime.datetime.now()
-        sessionParams["startTime"] = now.strftime("%Y%m%d_%H%M%S")
-        sessionParams["baseYear"] = now.year
-        sessionParams["uuid"] = str(uuid.uuid4())
-
-        return sessionParams
+        return {
+            "user": getpass.getuser().replace(" ", "_"),
+            "baseYear": datetime.now().year,
+            "uuid": str(uuid.uuid4()),
+        }
 
     def readProcessingInput(self):
         """Read user input from main dialog"""
@@ -464,74 +407,6 @@ class YKRTool:
                 )
             )
 
-    def uploadInputLayers(self):
-        return
-        """Write layers to database"""
-        self.layerUploadIndex = 0
-        self.uploadSingleLayer()
-
-    def uploadSingleLayer(self):
-        return
-        """Uploads a single input layer to database"""
-        alg = QgsApplication.processingRegistry().algorithmById(
-            "gdal:importvectorintopostgisdatabasenewconnection"
-        )
-        params = {
-            "A_SRS": QgsCoordinateReferenceSystem("EPSG:3067"),
-            "T_SRS": None,
-            "S_SRS": None,
-            "HOST": self.connParams["host"],
-            "PORT": self.connParams["port"],
-            "USER": self.connParams["user"],
-            "DBNAME": self.connParams["database"],
-            "PASSWORD": self.connParams["password"],
-            "SCHEMA": "user_input",
-            "PK": "fid",
-            "PRIMARY_KEY": None,
-            "PROMOTETOMULTI": False,
-        }
-        context = QgsProcessingContext()
-        feedback = QgsProcessingFeedback()
-        layer = self.inputLayers[self.layerUploadIndex]
-        if not layer:
-            self.tableNames[layer] = False
-            self.uploadNextLayer()
-        params["INPUT"] = layer
-        tableName = self.sessionParams["uuid"] + "_" + layer.name()
-        tableName = tableName.replace("-", "_")
-        params["TABLE"] = tableName[:49]  # truncate tablename to under 63c
-        self.tableNames[layer] = params["TABLE"]
-        if layer.geometryType() == 0:  # point
-            params["GTYPE"] = 3
-        elif layer.geometryType() == 2:  # polygon
-            params["GTYPE"] = 8
-        task = QgsProcessingAlgRunnerTask(alg, params, context, feedback)
-        task.executed.connect(partial(self.uploadFinished, context))
-        QgsApplication.taskManager().addTask(task)
-        self.iface.messageBar().pushMessage(
-            "Ladataan tasoa tietokantaan", layer.name(), Qgis.Info, duration=3
-        )
-
-    def uploadFinished(self, context, successful, results):
-        return
-        if not successful:
-            self.iface.messageBar().pushMessage(
-                "Virhe",
-                "Virhe ladattaessa tasoa tietokantaan",
-                Qgis.Warning,
-                duration=0,
-            )
-        self.uploadNextLayer()
-
-    def uploadNextLayer(self):
-        return
-        """Uploads the next layer in the input layer list"""
-        self.layerUploadIndex += 1
-        if self.layerUploadIndex < len(self.inputLayers):
-            self.uploadSingleLayer()
-        else:
-            self.runCalculation()
-
     def runCalculation(self):
         """Runs the main calculation"""
         try:
@@ -549,7 +424,6 @@ class YKRTool:
             self.iface.messageBar().pushMessage(
                 "Virhe laskennassa", str(e), Qgis.Critical, duration=0
             )
-            self.cleanUpSession()
             return False
 
     def getCalculationQueries(self):
@@ -565,22 +439,25 @@ class YKRTool:
             "includeBusinessTravel": self.includeBusinessTravel,
             "outputFormat": "geojson",
         }
-        if not self.calculateFuture:
-            queries.append(
-                {
-                    "url": self.urlBase + "co2-calculate-emissions/",
-                    "params": params
-                    | {"calculationYear": self.sessionParams["baseYear"]},
-                }
-            )
-        else:
-            futureQuery = self.generateFutureQuery(params)
-            queries.append(futureQuery)
+        query = (
+            {
+                "url": self.urlBase + "co2-calculate-emissions/",
+                "params": params | {"calculationYear": self.sessionParams["baseYear"]},
+            }
+            if not self.calculateFuture
+            else self.generateFutureQuery(params)
+        )
+
+        query["headers"] = {
+            "uuid": str(self.sessionParams["uuid"]),
+            "user": self.sessionParams["user"],
+        }
+        queries.append(query)
         return queries
 
     def generateFutureQuery(self, params):
         """Constructs a query for future calculation"""
-        query = {
+        return {
             "url": self.urlBase + "co2-calculate-emissions-loop/",
             "params": params
             | {
@@ -588,67 +465,15 @@ class YKRTool:
                 "targetYear": self.targetYear,
             },
         }
-        """futureNetworkTableName = (self.tableNames[self.futureNetworkLayer]).lower()
-        if futureNetworkTableName:
-            query += ", '{}'".format(futureNetworkTableName)
-        else:
-            query += ", NULL"
-        futureStopsTableName = (self.tableNames[self.futureStopsLayer]).lower()
-        if futureStopsTableName:
-            query += ", '{}'".format(futureStopsTableName)
-        query += ")"""
-        return query
 
     def postCalculation(self):
-        """Called after QueryTask finishes. Writes session info to sessions table and closes session"""
-        try:
-            self.writeSessionInfo()
-            self.iface.messageBar().pushMessage(
-                "Valmis",
-                "Laskentasessio " + str(self.sessionParams["uuid"]) + " on valmis",
-                Qgis.Success,
-                duration=0,
-            )
-        except Exception as e:
-            self.iface.messageBar().pushMessage(
-                "Virhe kirjoittaessa session tietoja:", str(e), Qgis.Warning, duration=0
-            )
-        try:
-            self.cleanUpSession()
-        except Exception as e:
-            self.iface.messageBar().pushMessage(
-                "Virhe session sulkemisessa:", str(e), Qgis.Warning, duration=0
-            )
-
-    def writeSessionInfo(self):
-        return
-        """Writes session info to user_output.sessions table"""
-        uuid = self.sessionParams["uuid"]
-        user = self.sessionParams["user"]
-        geomArea = self.geomArea
-        startTime = self.sessionParams["startTime"]
-        baseYear = self.sessionParams["baseYear"]
-        targetYear = self.targetYear
-        pitkoScenario = self.pitkoScenario
-        emissionsAllocation = self.emissionsAllocation
-        elecEmissionType = self.elecEmissionType
-
-        self.cur.execute(
-            """INSERT INTO user_output.sessions VALUES (%s, %s, %s, %s, %s,
-        %s, %s, %s, %s)""",
-            (
-                uuid,
-                user,
-                startTime,
-                baseYear,
-                targetYear,
-                pitkoScenario,
-                emissionsAllocation,
-                elecEmissionType,
-                geomArea,
-            ),
+        """Called after QueryTask finishes"""
+        self.iface.messageBar().pushMessage(
+            "Valmis",
+            "Laskentasessio " + str(self.sessionParams["uuid"]) + " on valmis",
+            Qgis.Success,
+            duration=0,
         )
-        self.conn.commit()
 
     def addResultAsLayers(self, results):
         try:
@@ -680,28 +505,8 @@ class YKRTool:
                 "Virhe lisättäessä tulostasoa:", str(e), Qgis.Warning, duration=0
             )
 
-    def cleanUpSession(self):
-        return
-        """Delete temporary data and close db connection"""
-        for table in list(self.tableNames.values()):
-            if not table:
-                continue
-            try:
-                self.cur.execute('DROP TABLE user_input."{}"'.format(table.lower()))
-                self.conn.commit()
-            except Exception as e:
-                self.iface.messageBar().pushMessage(
-                    "Virhe poistettaessa taulua {}".format(table),
-                    str(e),
-                    Qgis.Warning,
-                    duration=0,
-                )
-                self.conn.rollback()
-        self.conn.close()
-
     def postError(self):
-        """Called after querytask is terminated. Closes session"""
-        self.cleanUpSession()
+        """Called after querytask is terminated"""
         self.iface.messageBar().pushMessage(
             "Virhe laskentafunktiota suorittaessa",
             "Katso lisätiedot virhelokista",
