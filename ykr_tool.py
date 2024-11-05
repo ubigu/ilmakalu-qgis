@@ -416,7 +416,12 @@ class YKRTool:
             queryTask.calcResult.connect(self.addResultAsLayers)
             queryTask.taskCompleted.connect(self.postCalculation)
             queryTask.taskTerminated.connect(self.postError)
-            QgsApplication.taskManager().addTask(queryTask)
+
+            """ A workaround for the function scope variable issue, see 
+            https://gis.stackexchange.com/questions/296175/issues-with-qgstask-and-task-manager/325871#325871 """
+            globals()["queryTask"] = queryTask
+            QgsApplication.taskManager().addTask(globals()["queryTask"])
+
             self.iface.messageBar().pushMessage(
                 "Lasketaan", "Laskenta käynnissä", Qgis.Info, duration=15
             )
