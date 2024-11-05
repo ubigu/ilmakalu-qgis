@@ -246,8 +246,10 @@ class YKRTool:
     def setupMainDialog(self):
         """Sets up the main dialog"""
         md = self.mainDialog
-        md.geomArea.addItems(list(municipalities.keys()))
+
+        md.adminArea.currentTextChanged.connect(self.handleRegionToggle)
         md.adminArea.addItems(list(regions.keys()))
+
         md.pitkoScenario.addItems(
             ["wem", "eu80", "kasvu", "muutos", "saasto", "static"]
         )
@@ -268,6 +270,13 @@ class YKRTool:
         md.futureStopsLoadLayer.clicked.connect(self.handleLayerToggle)
 
         md.calculateFuture.clicked.connect(self.handleLayerToggle)
+
+    def handleRegionToggle(self, region):
+        geomArea = self.mainDialog.geomArea
+        geomArea.clear()
+        geomArea.addItems(
+            [k for k, v in municipalities.items() if v in regions[region]]
+        )
 
     def handleLayerToggle(self):
         """Toggle UI components visibility based on selection"""

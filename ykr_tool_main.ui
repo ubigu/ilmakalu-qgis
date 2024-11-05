@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>468</width>
-    <height>700</height>
+    <height>650</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -36,7 +36,7 @@
           <item row="0" column="0">
            <widget class="QLabel" name="geomAreaLabel">
             <property name="text">
-             <string>Geometrinen alue:</string>
+             <string>Kunta:</string>
             </property>
            </widget>
           </item>
@@ -55,14 +55,14 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Aseta laskennan aluerajaus. Oletus: Tampere</string>
+             <string>Aseta laskennan kunta. Oletus: Tampere</string>
             </property>
            </widget>
           </item>
           <item row="1" column="0">
            <widget class="QLabel" name="adminAreaLabel">
             <property name="text">
-             <string>Hallinnollinen alue:</string>
+             <string>Maakunta:</string>
             </property>
            </widget>
           </item>
@@ -81,7 +81,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Aseta hallinnollinen alue. Oletus: Pirkanmaa</string>
+             <string>Aseta maakunta. Oletus: Pirkanmaa</string>
             </property>
            </widget>
           </item>
