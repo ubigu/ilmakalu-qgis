@@ -42,7 +42,12 @@ from qgis.core import (
     QgsVectorLayer,
 )
 
-from .areas import municipalities, regions
+from .municipalities import (
+    get_mun_code,
+    get_mun_names_by_reg,
+    get_reg_code,
+    get_reg_names,
+)
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -247,8 +252,8 @@ class YKRTool:
         """Sets up the main dialog"""
         md = self.mainDialog
 
-        md.adminArea.currentTextChanged.connect(self.handleRegionToggle)
-        md.adminArea.addItems(list(regions.keys()))
+        md.inputReg.currentTextChanged.connect(self.handleRegionToggle)
+        md.inputReg.addItems(get_reg_names())
 
         md.pitkoScenario.addItems(
             ["wem", "eu80", "kasvu", "muutos", "saasto", "static"]
@@ -272,11 +277,9 @@ class YKRTool:
         md.calculateFuture.clicked.connect(self.handleLayerToggle)
 
     def handleRegionToggle(self, region):
-        geomArea = self.mainDialog.geomArea
-        geomArea.clear()
-        geomArea.addItems(
-            [k for k, v in municipalities.items() if v in regions[region]]
-        )
+        inputMun = self.mainDialog.inputMun
+        inputMun.clear()
+        inputMun.addItems(get_mun_names_by_reg(region))
 
     def handleLayerToggle(self):
         """Toggle UI components visibility based on selection"""
@@ -317,8 +320,8 @@ class YKRTool:
         md = self.mainDialog
         self.inputLayers = []
 
-        self.geomArea = [municipalities[md.geomArea.currentText()]]
-        self.adminArea = regions[md.adminArea.currentText()]
+        self.inputMun = [get_mun_code(md.inputMun.currentText())]
+        self.inputReg = get_reg_code(md.inputReg.currentText())
         self.onlySelectedFeats = md.onlySelectedFeats.isChecked()
         self.pitkoScenario = md.pitkoScenario.currentText()
         self.emissionsAllocation = md.emissionsAllocation.currentText()
@@ -445,7 +448,7 @@ class YKRTool:
         queries = []
 
         params = {
-            "mun": self.geomArea,
+            "mun": self.inputMun,
             "calculationScenario": self.pitkoScenario,
             "method": self.emissionsAllocation,
             "electricityType": self.elecEmissionType,

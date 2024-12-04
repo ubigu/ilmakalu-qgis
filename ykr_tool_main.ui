@@ -33,41 +33,15 @@
        <layout class="QVBoxLayout" name="verticalLayout_2">
         <item>
          <layout class="QFormLayout" name="formLayout_3">
-          <item row="0" column="0">
-           <widget class="QLabel" name="geomAreaLabel">
-            <property name="text">
-             <string>Kunta:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QComboBox" name="geomArea">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>23</height>
-             </size>
-            </property>
-            <property name="toolTip">
-             <string>Aseta laskennan kunta. Oletus: Tampere</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="adminAreaLabel">
+         <item row="0" column="0">
+           <widget class="QLabel" name="inputRegLabel">
             <property name="text">
              <string>Maakunta:</string>
             </property>
            </widget>
           </item>
-          <item row="1" column="1">
-           <widget class="QComboBox" name="adminArea">
+          <item row="0" column="1">
+           <widget class="QComboBox" name="inputReg">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -81,7 +55,33 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Aseta maakunta. Oletus: Pirkanmaa</string>
+             <string>Aseta maakunta</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="inputMunLabel">
+            <property name="text">
+             <string>Kunta:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="inputMun">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>23</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Aseta laskennan kunta</string>
             </property>
            </widget>
           </item>
