@@ -29,8 +29,8 @@ def get_mun_code(name):
 
 
 def get_reg_names():
-    return df[reg_name].unique()
+    return df[reg_name].sort_values().unique()
 
 
 def get_mun_names_by_reg(reg):
-    return list(df.loc[df[reg_code] == get_reg_code(reg)][mun_name])
+    return list(df.loc[df[reg_code] == get_reg_code(reg)][mun_name].sort_values())
