@@ -476,7 +476,7 @@ class YKRTool:
         """Runs the main calculation"""
         try:
             queries = self.getCalculationQueries()
-            queryTask = QueryTask(queries, self.inputLayers)
+            queryTask = QueryTask(queries, json.dumps(self.inputLayers))
 
             queryTask.calcResult.connect(self.addResultAsLayers)
             queryTask.taskCompleted.connect(self.postCalculation)
