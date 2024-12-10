@@ -41,6 +41,7 @@ from qgis.core import (
     QgsProject,
     QgsVectorLayer,
 )
+from qgis.gui import QgsFileWidget
 
 from .municipalities import (
     get_mun_code,
@@ -84,12 +85,16 @@ class YKRTool:
 
         # Declare instance attributes
         self.actions = []
+        self.connParams = None
         self.menu = self.tr("&Ilmastovaikutusten arviointityökalu")
 
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
         self.first_start = None
 
+        self.settingsDialog = uic.loadUi(
+            os.path.join(self.plugin_dir, "ykr_tool_db_settings.ui")
+        )
         self.mainDialog = uic.loadUi(os.path.join(self.plugin_dir, "ykr_tool_main.ui"))
         self.infoDialog = uic.loadUi(os.path.join(self.plugin_dir, "ykr_tool_info.ui"))
 
@@ -264,6 +269,7 @@ class YKRTool:
         md.onlySelectedFeats.setEnabled(False)
         md.futureBox.setEnabled(False)
 
+        md.settingsButton.clicked.connect(self.displaySettingsDialog)
         md.infoButton.clicked.connect(lambda: self.infoDialog.show())
 
         md.futureAreasLayerList.hide()
@@ -275,6 +281,53 @@ class YKRTool:
         md.futureStopsLoadLayer.clicked.connect(self.handleLayerToggle)
 
         md.calculateFuture.clicked.connect(self.handleLayerToggle)
+
+    def displaySettingsDialog(self):
+        """Sets up and displays the settings dialog"""
+        self.settingsDialog.show()
+        self.settingsDialog.configFileInput.setStorageMode(QgsFileWidget.GetFile)
+        self.settingsDialog.configFileInput.setFilePath(
+            QSettings().value("/YKRTool/configFilePath", "", type=str)
+        )
+        self.settingsDialog.loadFileButton.clicked.connect(
+            self.setConnectionParamsFromFile
+        )
+
+        result = self.settingsDialog.exec_()
+        if result:
+            self.connParams = self.readConnectionParamsFromInput()
+
+    def setConnectionParamsFromFile(self):
+        """Reads connection parameters from file and sets them to the input fields"""
+        filePath = self.settingsDialog.configFileInput.filePath()
+        QSettings().setValue("/YKRTool/configFilePath", filePath)
+
+        try:
+            dbParams = self.parseConfigFile(filePath)
+        except Exception as e:
+            self.iface.messageBar().pushMessage(
+                "Virhe luettaessa tiedostoa", str(e), Qgis.Warning, duration=10
+            )
+
+        self.setConnectionParamsFromInput(dbParams)
+
+    def setConnectionParamsFromInput(self, params):
+        """Sets connection parameters to input fields"""
+        self.settingsDialog.dbHost.setValue(params["host"])
+        self.settingsDialog.dbPort.setValue(params["port"])
+        self.settingsDialog.dbName.setValue(params["database"])
+        self.settingsDialog.dbUser.setValue(params["user"])
+        self.settingsDialog.dbPass.setText(params["password"])
+
+    def readConnectionParamsFromInput(self):
+        """Reads connection parameters from user input and returns a dictionary"""
+        params = {}
+        params["host"] = self.settingsDialog.dbHost.value()
+        params["port"] = self.settingsDialog.dbPort.value()
+        params["database"] = self.settingsDialog.dbName.value()
+        params["user"] = self.settingsDialog.dbUser.value()
+        params["password"] = self.settingsDialog.dbPass.text()
+        return params
 
     def handleRegionToggle(self, region):
         inputMun = self.mainDialog.inputMun
