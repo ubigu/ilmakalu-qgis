@@ -28,6 +28,7 @@ import os
 
 # Import the code for the dialog
 import uuid
+from configparser import ConfigParser
 from datetime import datetime
 
 from PyQt5 import uic
@@ -85,7 +86,7 @@ class YKRTool:
 
         # Declare instance attributes
         self.actions = []
-        self.connParams = None
+        self.connParams = {}
         self.menu = self.tr("&Ilmastovaikutusten arviointityökalu")
 
         # Check if plugin was started the first time in current QGIS session
@@ -221,7 +222,7 @@ class YKRTool:
         # Only create GUI ONCE in callback, so that it will only load when the plugin is started
         if self.first_start:
             self.first_start = False
-            self.setupMainDialog()
+            self.setupApplication()
 
         # Check if features are selected
         if self.iface.activeLayer().selectedFeatures():
@@ -253,8 +254,8 @@ class YKRTool:
         self.layersToGeoJSON()
         self.runCalculation()
 
-    def setupMainDialog(self):
-        """Sets up the main dialog"""
+    def setupApplication(self):
+        """Sets up the dialogs"""
         md = self.mainDialog
 
         md.inputReg.currentTextChanged.connect(self.handleRegionToggle)
@@ -269,18 +270,29 @@ class YKRTool:
         md.onlySelectedFeats.setEnabled(False)
         md.futureBox.setEnabled(False)
 
-        md.settingsButton.clicked.connect(self.displaySettingsDialog)
-        md.infoButton.clicked.connect(lambda: self.infoDialog.show())
-
         md.futureAreasLayerList.hide()
         md.futureNetworkLayerList.hide()
         md.futureStopsLayerList.hide()
 
+        self.__toggleLoadFileButtonState(self.settingsDialog.configFileInput.filePath())
+        self.__setEventListeners()
+
+    def __setEventListeners(self):
+        md = self.mainDialog
+        md.settingsButton.clicked.connect(self.displaySettingsDialog)
+        md.infoButton.clicked.connect(lambda: self.infoDialog.show())
         md.futureAreasLoadLayer.clicked.connect(self.handleLayerToggle)
         md.futureNetworkLoadLayer.clicked.connect(self.handleLayerToggle)
         md.futureStopsLoadLayer.clicked.connect(self.handleLayerToggle)
-
         md.calculateFuture.clicked.connect(self.handleLayerToggle)
+
+        sd = self.settingsDialog
+        sd.loadFileButton.clicked.connect(self.setConnectionParamsFromFile)
+        sd.resetSettingsButton.clicked.connect(self.clearConnectionParams)
+        sd.configFileInput.fileChanged.connect(self.__toggleLoadFileButtonState)
+
+    def __toggleLoadFileButtonState(self, txt):
+        self.settingsDialog.loadFileButton.setEnabled(len(txt) > 0)
 
     def displaySettingsDialog(self):
         """Sets up and displays the settings dialog"""
@@ -289,13 +301,12 @@ class YKRTool:
         self.settingsDialog.configFileInput.setFilePath(
             QSettings().value("/YKRTool/configFilePath", "", type=str)
         )
-        self.settingsDialog.loadFileButton.clicked.connect(
-            self.setConnectionParamsFromFile
-        )
 
         result = self.settingsDialog.exec_()
         if result:
             self.connParams = self.readConnectionParamsFromInput()
+        else:
+            self.restoreConnectionParams()
 
     def setConnectionParamsFromFile(self):
         """Reads connection parameters from file and sets them to the input fields"""
@@ -303,30 +314,84 @@ class YKRTool:
         QSettings().setValue("/YKRTool/configFilePath", filePath)
 
         try:
-            dbParams = self.parseConfigFile(filePath)
+            self.setConnectionParamsFromInput(self.parseConfigFile(filePath))
         except Exception as e:
             self.iface.messageBar().pushMessage(
                 "Virhe luettaessa tiedostoa", str(e), Qgis.Warning, duration=10
             )
 
-        self.setConnectionParamsFromInput(dbParams)
+    def parseConfigFile(self, filePath):
+        """Reads configuration file and returns parameters as a dict"""
+        # Setup an empty dict with correct keys to avoid keyerrors
+        dbParams = {
+            "host": "",
+            "port": "",
+            "database": "",
+            "username": "",
+            "password": "",
+        }
+        if not os.path.exists(filePath):
+            self.iface.messageBar().pushMessage(
+                "Virhe", "Tiedostoa ei voitu lukea", Qgis.Warning
+            )
+            return dbParams
+
+        parser = ConfigParser()
+        parser.read(filePath)
+        if parser.has_section("postgresql"):
+            params = parser.items("postgresql")
+            for param in params:
+                dbParams[param[0]] = param[1]
+        else:
+            self.iface.messageBar().pushMessage(
+                "Virhe",
+                "Tiedosto ei sisällä\
+                tietokannan yhteystietoja",
+                Qgis.Warning,
+            )
+
+        return dbParams
+
+    def clearConnectionParams(self):
+        sd = self.settingsDialog
+        sd.dbHost.setValue("")
+        sd.dbPort.setValue("")
+        sd.dbName.setValue("")
+        sd.dbUser.setValue("")
+        sd.dbPass.setText("")
+
+        QSettings().setValue("/YKRTool/configFilePath", "")
+        sd.configFileInput.setFilePath("")
+
+    def __getConnectionParamValue(self, key):
+        return "" if key not in self.connParams else self.connParams[key]
+
+    def restoreConnectionParams(self):
+        sd = self.settingsDialog
+        sd.dbHost.setValue(self.__getConnectionParamValue("host"))
+        sd.dbPort.setValue(self.__getConnectionParamValue("port"))
+        sd.dbName.setValue(self.__getConnectionParamValue("database"))
+        sd.dbUser.setValue(self.__getConnectionParamValue("username"))
+        sd.dbPass.setText(self.__getConnectionParamValue("password"))
 
     def setConnectionParamsFromInput(self, params):
         """Sets connection parameters to input fields"""
-        self.settingsDialog.dbHost.setValue(params["host"])
-        self.settingsDialog.dbPort.setValue(params["port"])
-        self.settingsDialog.dbName.setValue(params["database"])
-        self.settingsDialog.dbUser.setValue(params["user"])
-        self.settingsDialog.dbPass.setText(params["password"])
+        sd = self.settingsDialog
+        sd.dbHost.setValue(params["host"])
+        sd.dbPort.setValue(params["port"])
+        sd.dbName.setValue(params["database"])
+        sd.dbUser.setValue(params["username"])
+        sd.dbPass.setText(params["password"])
 
     def readConnectionParamsFromInput(self):
         """Reads connection parameters from user input and returns a dictionary"""
+        sd = self.settingsDialog
         params = {}
-        params["host"] = self.settingsDialog.dbHost.value()
-        params["port"] = self.settingsDialog.dbPort.value()
-        params["database"] = self.settingsDialog.dbName.value()
-        params["user"] = self.settingsDialog.dbUser.value()
-        params["password"] = self.settingsDialog.dbPass.text()
+        params["host"] = sd.dbHost.value()
+        params["port"] = sd.dbPort.value()
+        params["database"] = sd.dbName.value()
+        params["username"] = sd.dbUser.value()
+        params["password"] = sd.dbPass.text()
         return params
 
     def handleRegionToggle(self, region):
@@ -476,7 +541,7 @@ class YKRTool:
         """Runs the main calculation"""
         try:
             queries = self.getCalculationQueries()
-            queryTask = QueryTask(queries, json.dumps(self.inputLayers))
+            queryTask = QueryTask(queries, self.inputLayers, self.connParams)
 
             queryTask.calcResult.connect(self.addResultAsLayers)
             queryTask.taskCompleted.connect(self.postCalculation)
