@@ -67,30 +67,27 @@
            </widget>
           </item>
           <item row="1" column="1">
-           <widget class="QComboBox" name="inputMun">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>23</height>
-             </size>
-            </property>
-            <property name="toolTip">
-             <string>Aseta laskennan kunta</string>
-            </property>
-           </widget>
+          <widget class="QListWidget" name="inputMun">
+           <property name="selectionMode">
+            <enum>QAbstractItemView::ExtendedSelection</enum>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>100</height>
+            </size>
+           </property>
+           <property name="toolTip">
+            <string>Aseta laskennan kunta. Voit valita useamman pitämällä CTRL-näppäintä pohjassa</string>
+           </property>
+          </widget>
           </item>
          </layout>
         </item>
         <item>
          <widget class="QCheckBox" name="onlySelectedFeats">
           <property name="text">
-           <string>Käytä vain valittuja kohteita</string>
+           <string>Käytä vain kartalta valittuja kohteita</string>
           </property>
          </widget>
         </item>

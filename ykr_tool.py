@@ -437,8 +437,11 @@ class YKRTool:
         """Read user input from main dialog"""
         md = self.mainDialog
         self.inputLayers = []
-
-        self.inputMun = [get_mun_code(md.inputMun.currentText())]
+        self.inputMun = [
+            get_mun_code(mun.text())
+            for mun in md.inputMun.selectedItems()
+            if mun is not None
+        ]
         self.inputReg = get_reg_code(md.inputReg.currentText())
         self.onlySelectedFeats = md.onlySelectedFeats.isChecked()
         self.pitkoScenario = md.pitkoScenario.currentText()
