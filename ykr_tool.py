@@ -224,8 +224,9 @@ class YKRTool:
             self.first_start = False
             self.setupApplication()
 
+        activeLayer = self.iface.activeLayer()
         # Check if features are selected
-        if self.iface.activeLayer().selectedFeatures():
+        if activeLayer is not None and activeLayer.selectedFeatures():
             md.onlySelectedFeats.setEnabled(True)
         else:
             md.onlySelectedFeats.setEnabled(False)
