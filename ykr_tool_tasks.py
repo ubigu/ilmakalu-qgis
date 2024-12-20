@@ -31,17 +31,18 @@ class QueryTask(QgsTask):
                 self.exception = "Laskenta keskeytetty"
                 return False
             try:
-                result = (
+                resp = (
                     requests.post(**(query | {"json": self.body}))
                     if len(self.body) > 0
                     else requests.get(**query)
                 )
-                if result.ok:
-                    self.results.append(result.json())
-                else:
-                    raise Exception(f"{result.status_code}: {result.text}")
+                result = resp.json()
+                if not resp.ok:
+                    print(result["detail"])
+                    raise resp.raise_for_status()
+                self.results.append(result)
             except Exception as e:
-                print(f"Virhe yhdistettäessä rajapintaan ({e})")
+                print(f"Laskentavirhe: {e}")
                 self.exception = e
                 return False
         self.calcResult.emit(self.results)
