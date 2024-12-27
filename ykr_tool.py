@@ -28,38 +28,41 @@ import os
 
 # Import the code for the dialog
 import uuid
+from collections.abc import Callable
 from configparser import ConfigParser
 from datetime import datetime
+from typing import Any
 
-from PyQt5 import uic
-from PyQt5.QtCore import QCoreApplication, QSettings, QTranslator, qVersion
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QAction
-from qgis.core import (
+from dotenv import load_dotenv
+from PyQt5 import uic  # type: ignore
+from PyQt5.QtCore import (  # type: ignore
+    QCoreApplication,
+    QSettings,
+    QTranslator,
+    qVersion,
+)
+from PyQt5.QtGui import QIcon  # type: ignore
+from PyQt5.QtWidgets import QAction, QDialogButtonBox, QWidget  # type: ignore
+from qgis.core import (  # type: ignore
     Qgis,
     QgsApplication,
+    QgsFeature,
     QgsJsonExporter,
     QgsProject,
     QgsVectorLayer,
 )
-from qgis.gui import QgsFileWidget
-
-from .municipalities import (
-    get_mun_code,
-    get_mun_names_by_reg,
-    get_reg_code,
-    get_reg_names,
-)
+from qgis.gui import QgsFileWidget  # type: ignore
 
 # Initialize Qt resources from file resources.py
-from .resources import *
+from .resources import *  # noqa: F403
+from .ykr_areas import YKRAreas
 from .ykr_tool_tasks import QueryTask
 
 
 class YKRTool:
     """QGIS Plugin Implementation."""
 
-    def __init__(self, iface):
+    def __init__(self, iface: Any):
         """Constructor.
 
         :param iface: An interface instance that will be passed to this class
@@ -103,72 +106,54 @@ class YKRTool:
         self.futureAreasLayer = None
         self.futureNetworkLayer = None
         self.futureStopsLayer = None
-        self.urlBase = "http://localhost:4000/"
+        load_dotenv(dotenv_path=os.path.join(self.plugin_dir, ".env"))
+        self.urlBase = os.getenv("API_URL", "")
 
     # noinspection PyMethodMayBeStatic
-    def tr(self, message):
+    def tr(self, message: str) -> str:
         """Get the translation for a string using Qt translation API.
 
         We implement this ourselves since we do not inherit QObject.
 
         :param message: String for translation.
-        :type message: str, QString
 
         :returns: Translated version of message.
-        :rtype: QString
         """
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate("YKRTool", message)
 
     def add_action(
         self,
-        icon_path,
-        text,
-        callback,
-        enabled_flag=True,
-        add_to_menu=True,
-        add_to_toolbar=True,
-        status_tip=None,
-        whats_this=None,
-        parent=None,
-    ):
+        icon_path: str,
+        text: str,
+        callback: Callable,
+        enabled_flag: bool = True,
+        add_to_menu: bool = True,
+        add_to_toolbar: bool = True,
+        status_tip: str | None = None,
+        whats_this: str | None = None,
+        parent: QWidget | None = None,
+    ) -> QAction:
         """Add a toolbar icon to the toolbar.
 
         :param icon_path: Path to the icon for this action. Can be a resource
             path (e.g. ':/plugins/foo/bar.png') or a normal file system path.
-        :type icon_path: str
-
         :param text: Text that should be shown in menu items for this action.
-        :type text: str
-
         :param callback: Function to be called when the action is triggered.
-        :type callback: function
-
         :param enabled_flag: A flag indicating if the action should be enabled
             by default. Defaults to True.
-        :type enabled_flag: bool
-
         :param add_to_menu: Flag indicating whether the action should also
             be added to the menu. Defaults to True.
-        :type add_to_menu: bool
-
         :param add_to_toolbar: Flag indicating whether the action should also
             be added to the toolbar. Defaults to True.
-        :type add_to_toolbar: bool
-
         :param status_tip: Optional text to show in a popup when mouse pointer
             hovers over the action.
-        :type status_tip: str
-
-        :param parent: Parent widget for the new action. Defaults None.
-        :type parent: QWidget
-
         :param whats_this: Optional text to show in the status bar when the
             mouse pointer hovers over the action.
+        :param parent: Parent widget for the new action. Defaults None.
 
         :returns: The action that was created. Note that the action is also
             added to self.actions list.
-        :rtype: QAction
         """
 
         icon = QIcon(icon_path)
@@ -215,7 +200,7 @@ class YKRTool:
             )
             self.iface.removeToolBarIcon(action)
 
-    def run(self):
+    def run(self) -> bool | None:
         """Run method that performs all the real work"""
         md = self.mainDialog
         # Create the dialog with elements (after translation) and keep reference
@@ -259,9 +244,6 @@ class YKRTool:
         """Sets up the dialogs"""
         md = self.mainDialog
 
-        md.inputReg.currentTextChanged.connect(self.handleRegionToggle)
-        md.inputReg.addItems(get_reg_names())
-
         md.pitkoScenario.addItems(
             ["wem", "eu80", "kasvu", "muutos", "saasto", "static"]
         )
@@ -278,6 +260,10 @@ class YKRTool:
         self.__toggleLoadFileButtonState(self.settingsDialog.configFileInput.filePath())
         self.__setEventListeners()
 
+        self.areas = YKRAreas()
+        md.inputReg.addItems(self.areas.regions())
+        self.handleMunicipalityToggle()
+
     def __setEventListeners(self):
         md = self.mainDialog
         md.settingsButton.clicked.connect(self.displaySettingsDialog)
@@ -286,13 +272,15 @@ class YKRTool:
         md.futureNetworkLoadLayer.clicked.connect(self.handleLayerToggle)
         md.futureStopsLoadLayer.clicked.connect(self.handleLayerToggle)
         md.calculateFuture.clicked.connect(self.handleLayerToggle)
+        md.inputReg.currentTextChanged.connect(self.handleRegionToggle)
+        md.inputMun.itemSelectionChanged.connect(self.handleMunicipalityToggle)
 
         sd = self.settingsDialog
         sd.loadFileButton.clicked.connect(self.setConnectionParamsFromFile)
         sd.resetSettingsButton.clicked.connect(self.clearConnectionParams)
         sd.configFileInput.fileChanged.connect(self.__toggleLoadFileButtonState)
 
-    def __toggleLoadFileButtonState(self, txt):
+    def __toggleLoadFileButtonState(self, txt: str):
         self.settingsDialog.loadFileButton.setEnabled(len(txt) > 0)
 
     def displaySettingsDialog(self):
@@ -321,8 +309,12 @@ class YKRTool:
                 "Virhe luettaessa tiedostoa", str(e), Qgis.Warning, duration=10
             )
 
-    def parseConfigFile(self, filePath):
-        """Reads configuration file and returns parameters as a dict"""
+    def parseConfigFile(self, filePath: str) -> dict:
+        """Reads configuration file and returns parameters
+
+        :param filePath: A path to the configuration file
+        :returns: Connection parameters as a dict
+        """
         # Setup an empty dict with correct keys to avoid keyerrors
         dbParams = {
             "host": "",
@@ -364,7 +356,12 @@ class YKRTool:
         QSettings().setValue("/YKRTool/configFilePath", "")
         sd.configFileInput.setFilePath("")
 
-    def __getConnectionParamValue(self, key):
+    def __getConnectionParamValue(self, key: str) -> str:
+        """Get the value of the connection parameter. If not found, return an empty string
+
+        :param key: The name of the parameter
+        :returns: The value of the parameter
+        """
         return "" if key not in self.connParams else self.connParams[key]
 
     def restoreConnectionParams(self):
@@ -375,8 +372,11 @@ class YKRTool:
         sd.dbUser.setValue(self.__getConnectionParamValue("username"))
         sd.dbPass.setText(self.__getConnectionParamValue("password"))
 
-    def setConnectionParamsFromInput(self, params):
-        """Sets connection parameters to input fields"""
+    def setConnectionParamsFromInput(self, params: dict):
+        """Sets connection parameters to input fields
+
+        :param params: The connection parameters as a dictionary
+        """
         sd = self.settingsDialog
         sd.dbHost.setValue(params["host"])
         sd.dbPort.setValue(params["port"])
@@ -384,8 +384,11 @@ class YKRTool:
         sd.dbUser.setValue(params["username"])
         sd.dbPass.setText(params["password"])
 
-    def readConnectionParamsFromInput(self):
-        """Reads connection parameters from user input and returns a dictionary"""
+    def readConnectionParamsFromInput(self) -> dict:
+        """Reads connection parameters from user input
+
+        :returns: The connection parameters as a dictionary
+        """
         sd = self.settingsDialog
         params = {}
         params["host"] = sd.dbHost.value()
@@ -395,10 +398,21 @@ class YKRTool:
         params["password"] = sd.dbPass.text()
         return params
 
-    def handleRegionToggle(self, region):
+    def handleRegionToggle(self, region: str):
+        """Update the list of municipalities when a new region is selected
+
+        :param region: The name of the selected region
+        """
         inputMun = self.mainDialog.inputMun
         inputMun.clear()
-        inputMun.addItems(get_mun_names_by_reg(region))
+        inputMun.addItems(self.areas.municipalities(region))
+        self.mainDialog.inputMun.setCurrentRow(0)
+
+    def handleMunicipalityToggle(self):
+        """Disable the OK button if no municipalities are selected"""
+        self.mainDialog.buttonBox.button(QDialogButtonBox.Ok).setEnabled(
+            len(self.mainDialog.inputMun.selectedItems()) > 0
+        )
 
     def handleLayerToggle(self):
         """Toggle UI components visibility based on selection"""
@@ -421,13 +435,14 @@ class YKRTool:
             self.mainDialog.futureStopsLayerList.hide()
             self.mainDialog.futureStopsFile.show()
 
-        if self.mainDialog.calculateFuture.isChecked():
-            self.mainDialog.futureBox.setEnabled(True)
-        else:
-            self.mainDialog.futureBox.setEnabled(False)
+        self.mainDialog.futureBox.setEnabled(
+            self.mainDialog.calculateFuture.isChecked()
+        )
 
-    def generateSessionParameters(self):
-        """Get necessary values for processing session"""
+    def generateSessionParameters(self) -> dict:
+        """Get necessary values for processing session
+
+        :returns: The session parameters as a dict"""
         return {
             "user": getpass.getuser().replace(" ", "_"),
             "baseYear": datetime.now().year,
@@ -439,11 +454,11 @@ class YKRTool:
         md = self.mainDialog
         self.inputLayers = []
         self.inputMun = [
-            get_mun_code(mun.text())
+            self.areas.get_mun_code(mun.text())
             for mun in md.inputMun.selectedItems()
             if mun is not None
         ]
-        self.inputReg = get_reg_code(md.inputReg.currentText())
+        self.inputReg = self.areas.get_reg_code(md.inputReg.currentText())
         self.onlySelectedFeats = md.onlySelectedFeats.isChecked()
         self.pitkoScenario = md.pitkoScenario.currentText()
         self.emissionsAllocation = md.emissionsAllocation.currentText()
@@ -491,7 +506,7 @@ class YKRTool:
 
     def checkFutureLayerValidity(self):
         """Checks if future calculation input layers are valid"""
-        if not self.futureAreasLayer.isValid():
+        if not (self.futureAreasLayer and self.futureAreasLayer.isValid()):
             raise Exception("Virhe ladattaessa tulevaisuuden aluevaraustietoja")
         if self.futureNetworkLayer:
             if not self.futureNetworkLayer.isValid():
@@ -500,7 +515,13 @@ class YKRTool:
             if not self.futureStopsLayer.isValid():
                 raise Exception("Virhe ladattaessa joukkoliikennepysäkkitietoja")
 
-    def __featuresToGeoJSON(self, base, features):
+    def __featuresToGeoJSON(self, base: str, features: list[QgsFeature]):
+        """Convert the QgsFeatures to the GeoJSON format.
+
+        :param base: The name of the SQL table to which the features are associated
+        :param features: The list of the QgsFeatures to convert
+        :returns: The GeoJSON
+        """
         return {
             "name": (self.sessionParams["uuid"] + "_" + base)[
                 :49
@@ -541,7 +562,7 @@ class YKRTool:
                 )
             )
 
-    def runCalculation(self):
+    def runCalculation(self) -> None | bool:
         """Runs the main calculation"""
         try:
             queries = self.getCalculationQueries()
@@ -565,8 +586,11 @@ class YKRTool:
             )
             return False
 
-    def getCalculationQueries(self):
-        """Generate queries to call processing functions in database"""
+    def getCalculationQueries(self) -> list[dict]:
+        """Generate queries to call processing functions in database
+
+        :returns: The list of queries as dicts
+        """
         queries = []
 
         params = {
@@ -577,6 +601,7 @@ class YKRTool:
             "includeLongDistance": self.includeLongDistance,
             "includeBusinessTravel": self.includeBusinessTravel,
             "outputFormat": "geojson",
+            "writeSessionInfo": True,
         }
         query = (
             {
@@ -594,8 +619,12 @@ class YKRTool:
         queries.append(query)
         return queries
 
-    def generateFutureQuery(self, params):
-        """Constructs a query for future calculation"""
+    def generateFutureQuery(self, params: dict) -> dict:
+        """Constructs a query for future calculation
+
+        :param params: The parameters that all the queries have in common
+        :returns: A dict with future parameters added
+        """
         return {
             "url": self.urlBase + "co2-calculate-emissions-loop/",
             "params": params
@@ -614,7 +643,12 @@ class YKRTool:
             duration=0,
         )
 
-    def addResultAsLayers(self, results):
+    def addResultAsLayers(self, results: list[dict]):
+        """Visualize results in the map if they include features
+
+        :param results: Results as a list of dicts. Are expected to
+        contain a key 'features'
+        """
         try:
             layers = []
             layerNames = [

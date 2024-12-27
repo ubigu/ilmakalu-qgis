@@ -1,14 +1,14 @@
 import json
 
 import requests
-from PyQt5.QtCore import pyqtSignal
-from qgis.core import Qgis, QgsMessageLog, QgsTask
+from PyQt5.QtCore import pyqtSignal  # type: ignore
+from qgis.core import Qgis, QgsMessageLog, QgsTask  # type: ignore
 
 
 class QueryTask(QgsTask):
     calcResult = pyqtSignal(list)
 
-    def __init__(self, queries, inputLayers, connParams):
+    def __init__(self, queries: list[dict], inputLayers: list[dict], connParams: dict):
         super().__init__("Suoritetaan laskentaa", QgsTask.CanCancel)
         self.exception = None
         self.queries = queries
@@ -17,12 +17,17 @@ class QueryTask(QgsTask):
         self.body = {}
         if len(inputLayers) > 0:
             self.body["layers"] = json.dumps(inputLayers)
+
         if len(connParams) > 0 and not all(
             len(str(p or "")) <= 0 for p in connParams.values()
         ):
             self.body["connParams"] = json.dumps(connParams)
 
-    def run(self):
+    def run(self) -> bool:
+        """Run the task
+
+        :returns: A boolean indicating whether the calculation was successful or not
+        """
         if self.exception:
             return False
         for i, query in enumerate(self.queries):
@@ -39,7 +44,7 @@ class QueryTask(QgsTask):
                 result = resp.json()
                 if not resp.ok:
                     print(result["detail"])
-                    raise resp.raise_for_status()
+                    raise resp.raise_for_status() or Exception("An error occurred")
                 self.results.append(result)
             except Exception as e:
                 print(f"Laskentavirhe: {e}")
@@ -48,7 +53,7 @@ class QueryTask(QgsTask):
         self.calcResult.emit(self.results)
         return True
 
-    def finished(self, result):
+    def finished(self, result: dict):
         if not result:
             QgsMessageLog.logMessage(
                 "Laskentavirhe: " + str(self.exception), "YKRTool", Qgis.Critical
