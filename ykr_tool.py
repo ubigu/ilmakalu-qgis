@@ -27,7 +27,6 @@ import json
 import os
 
 # Import the code for the dialog
-import uuid
 from collections.abc import Callable
 from configparser import ConfigParser
 from datetime import datetime
@@ -446,7 +445,6 @@ class YKRTool:
         return {
             "user": getpass.getuser().replace(" ", "_"),
             "baseYear": datetime.now().year,
-            "uuid": str(uuid.uuid4()),
         }
 
     def readProcessingInput(self):
@@ -523,9 +521,6 @@ class YKRTool:
         :returns: The GeoJSON
         """
         return {
-            "name": (self.sessionParams["uuid"] + "_" + base)[
-                :49
-            ],  # truncate tablename to under 63c
             "base": base,
             "features": json.loads(QgsJsonExporter().exportFeatures(features)),
         }
@@ -613,7 +608,6 @@ class YKRTool:
         )
 
         query["headers"] = {
-            "uuid": str(self.sessionParams["uuid"]),
             "user": self.sessionParams["user"],
         }
         queries.append(query)
@@ -638,7 +632,7 @@ class YKRTool:
         """Called after QueryTask finishes"""
         self.iface.messageBar().pushMessage(
             "Valmis",
-            "Laskentasessio " + str(self.sessionParams["uuid"]) + " on valmis",
+            "Laskentasessio on valmis",
             Qgis.Success,
             duration=0,
         )
@@ -658,11 +652,12 @@ class YKRTool:
             for result in results:
                 for name in layerNames:
                     # Do not add a layer if there are no features
-                    if not result["features"]:
+                    geojson = result["geojson"]
+                    if not (geojson["features"]):
                         continue
                     layer = QgsVectorLayer(
-                        json.dumps(result),
-                        name[0] + " " + self.sessionParams["uuid"],
+                        json.dumps(geojson),
+                        name[0] + " " + result["id"],
                         "ogr",
                     )
                     layer.loadNamedStyle(os.path.join(self.plugin_dir, name[1]))

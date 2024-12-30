@@ -45,7 +45,7 @@ class QueryTask(QgsTask):
                 if not resp.ok:
                     print(result["detail"])
                     raise resp.raise_for_status() or Exception("An error occurred")
-                self.results.append(result)
+                self.results.append({"id": resp.headers["id"], "geojson": result})
             except Exception as e:
                 print(f"Laskentavirhe: {e}")
                 self.exception = e
