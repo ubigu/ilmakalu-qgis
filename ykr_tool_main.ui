@@ -341,12 +341,12 @@
           <item row="0" column="0">
            <widget class="QLabel" name="label_5">
             <property name="text">
-             <string>PITKO-skenaario:</string>
+             <string>PEIKKO-skenaario:</string>
             </property>
            </widget>
           </item>
           <item row="0" column="1">
-           <widget class="QComboBox" name="pitkoScenario">
+           <widget class="QComboBox" name="peikkoScenario">
             <property name="minimumSize">
              <size>
               <width>180</width>
@@ -358,47 +358,7 @@
             </property>
            </widget>
           </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="label_6">
-            <property name="text">
-             <string>Päästöjen allokointimenetelmä:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QComboBox" name="emissionsAllocation">
-            <property name="minimumSize">
-             <size>
-              <width>180</width>
-              <height>20</height>
-             </size>
-            </property>
-            <property name="toolTip">
-             <string>Valitse päästöjen allokointimenetelmä. Oletus: hjm</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="label_12">
-            <property name="text">
-             <string>Sähköpäästölaji:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QComboBox" name="elecEmissionType">
-            <property name="minimumSize">
-             <size>
-              <width>180</width>
-              <height>20</height>
-             </size>
-            </property>
-            <property name="toolTip">
-             <string>Valitse sähköpäästölaji, Oletus: hankinta</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0" colspan="2">
+          <item row="1" column="0" colspan="2">
            <widget class="QCheckBox" name="includeLongDistance">
             <property name="text">
              <string>Sisällytä kaukoliikenne</string>
@@ -408,7 +368,7 @@
             </property>
            </widget>
           </item>
-          <item row="4" column="0" colspan="2">
+          <item row="2" column="0" colspan="2">
            <widget class="QCheckBox" name="includeBusinessTravel">
             <property name="text">
              <string>Sisällytä työmatkat</string>

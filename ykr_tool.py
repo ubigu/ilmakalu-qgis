@@ -243,11 +243,7 @@ class YKRTool:
         """Sets up the dialogs"""
         md = self.mainDialog
 
-        md.pitkoScenario.addItems(
-            ["wem", "eu80", "kasvu", "muutos", "saasto", "static"]
-        )
-        md.emissionsAllocation.addItems(["hjm", "em"])
-        md.elecEmissionType.addItems(["hankinta", "tuotanto"])
+        md.peikkoScenario.addItems(["wemp", "wemh", "weml", "static"])
 
         md.onlySelectedFeats.setEnabled(False)
         md.futureBox.setEnabled(False)
@@ -458,9 +454,7 @@ class YKRTool:
         ]
         self.inputReg = self.areas.get_reg_code(md.inputReg.currentText())
         self.onlySelectedFeats = md.onlySelectedFeats.isChecked()
-        self.pitkoScenario = md.pitkoScenario.currentText()
-        self.emissionsAllocation = md.emissionsAllocation.currentText()
-        self.elecEmissionType = md.elecEmissionType.currentText()
+        self.peikkoScenario = md.peikkoScenario.currentText()
         self.includeLongDistance = md.includeLongDistance.isChecked()
         self.includeBusinessTravel = md.includeBusinessTravel.isChecked()
 
@@ -590,9 +584,7 @@ class YKRTool:
 
         params = {
             "mun": self.inputMun,
-            "calculationScenario": self.pitkoScenario,
-            "method": self.emissionsAllocation,
-            "electricityType": self.elecEmissionType,
+            "calculationScenario": self.peikkoScenario,
             "includeLongDistance": self.includeLongDistance,
             "includeBusinessTravel": self.includeBusinessTravel,
             "outputFormat": "geojson",
